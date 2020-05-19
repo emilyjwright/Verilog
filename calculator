@@ -1,0 +1,140 @@
+// Empty top module
+
+module top (hz100, reset, pb, ss7, ss6, ss5, ss4, ss3, ss2, ss1, ss0, left, right, red, green, blue);
+  input hz100, reset;
+  input [20:0] pb;
+  output [7:0] ss7, ss6, ss5, ss4, ss3, ss2, ss1, ss0, left, right;
+  output red, green, blue;
+
+  // Your code goes here...
+
+  reg [31:0] entry;      //value being entered
+  reg [31:0] saved;      //saved value to use as a second operand
+  reg [4:0] op;          //the selected operation
+  reg displaysaved;      //display entry or saved?
+  reg equalpressed;      //has equal key been pressed?
+  wire [4:0] key;        //outkey of scankey module 
+  wire pressed;          //strobe of scankey module
+  
+  wire[31:0] num = displaysaved ? saved : entry;
+  ssdec s07(.in(num[31:28]), .enable(1'b1), .out(ss7));
+  ssdec s06(.in(num[27:24]), .enable(1'b1), .out(ss6));
+  ssdec s05(.in(num[23:20]), .enable(1'b1), .out(ss5));
+  ssdec s04(.in(num[19:16]), .enable(1'b1), .out(ss4));
+  ssdec s03(.in(num[15:12]), .enable(1'b1), .out(ss3));
+  ssdec s02(.in(num[11:8]), .enable(1'b1), .out(ss2));
+  ssdec s01(.in(num[7:4]), .enable(1'b1), .out(ss1));
+  ssdec s00(.in(num[3:0]), .enable(1'b1), .out(ss0));
+  
+  scankey sk(.clk(hz100), .reset(reset), .in(pb[19:0]), .strobe(pressed), .out(key));
+ 
+  reg [31:0] nextresult;
+  always_comb nextresult = entry;
+  always @ (posedge pressed, posedge reset) begin
+    if(reset == 1'b1) begin
+      entry <= 32'b0;
+      saved <= 32'b0;
+      op <= 5'b0;
+      displaysaved <= 1'b0;
+      equalpressed <= 1'b0;
+    end //if 
+    else begin
+      if(key == 5'd17 && displaysaved == 1'b0)
+        entry <= (entry >> 5);
+      else if (key == 5'd16) begin
+        saved <= nextresult;
+        displaysaved <= 32'b1;
+        equalpressed <= 32'b1;
+      end //else if
+    
+
+    //always_comb begin
+      casez (key) 
+        5'b0????: begin
+          if (equalpressed == 1) begin
+            entry <= {28'b0, key[3:0]};
+            saved <= 32'b0;
+            op <= 5'b0;
+            displaysaved <= 1'b0;
+            equalpressed <= 1'b0;
+          end //if
+          else begin
+            if(entry[31:28] == 4'b0)
+              entry <= (entry << 5) | key;
+            displaysaved <= 1'b0;
+          end //else
+        end //5'b0????
+        5'b1001?: begin
+          if(equalpressed == 0) 
+              saved <= nextresult;
+            op <= key;
+            displaysaved <= 1'b1;
+            entry <= 32'b0;
+            equalpressed <= 1'b0;
+        end //5'b1001
+      endcase
+    //end //always_comb
+    end //else
+  end //always
+endmodule
+
+// Add more modules down here...
+module scankey (clk, reset, in, strobe, out);
+  input wire clk;
+  input wire reset;
+  input wire [19:0] in;
+  output strobe;
+  output [4:0] out;
+  reg [1:0] delay;
+  wire tempstrobe;
+  
+  always_ff @ (posedge clk) 
+    delay <= (delay << 1) | {1'b0, tempstrobe};
+  
+  assign strobe = delay[1];
+  
+  assign tempstrobe = out[0] | out[1] | out[2] | out[3] | out[4] | out[5] | in[0];
+  assign out[0] = in[1] | in[3] | in[5] | in[7] | in[9] | in[11] | in[13] | in[15] | in[17] | in[19];
+  assign out[1] = in[2] | in[3] | in[6] | in[7] | in[10] | in[11] | in[14] | in[15] | in[18] | in[19];
+  assign out[2] = in[4] | in[5] | in[6] | in[7] | in[12] | in[13] | in[14] | in[15];
+  assign out[3] = in[8] | in[9] | in[10] | in[11] | in[12] | in[13] | in[14];
+  assign out[4] = in[16] | in[17] | in[18] | in[19];
+
+endmodule
+
+module ssdec(in, enable, out);
+  input [3:0] in;
+  input enable;
+  output [7:0] out;
+  wire [15:0] y;
+  
+  wire a,b,c,d,e,f,g;
+  assign out = {g,f,e,d,c,b,a}; // connect A-G to ss0
+
+  // Your segment decode statements go below.
+  assign a = ~(y[1] | y[4] | y[11] | y[13]) & enable;
+  assign b = ~(y[5] | y[6] | y[11] | y[12] | y[14] | y[15]) & enable;
+  assign c = ~(y[2] | y[12] | y[14] | y[15]) & enable;
+  assign d = ~(y[1] | y[4] | y[7] | y[10] | y[15]) & enable;
+  assign e = ~(y[1] | y[3] | y[4] | y[5] | y[7] | y[9]) & enable;
+  assign f = ~(y[1] | y[2] | y[3] | y[7] | y[13]) & enable;
+  assign g = ~(y[0] | y[1] | y[7] | y[12]) & enable;
+  
+   assign y    = { enable &  in[3] &  in[2] &  in[1] &  in[0],
+                  enable &  in[3] &  in[2] &  in[1] & ~in[0],
+                  enable &  in[3] &  in[2] & ~in[1] &  in[0],
+                  enable &  in[3] &  in[2] & ~in[1] & ~in[0],
+                  enable &  in[3] & ~in[2] &  in[1] &  in[0],
+                  enable &  in[3] & ~in[2] &  in[1] & ~in[0],
+                  enable &  in[3] & ~in[2] & ~in[1] &  in[0],
+                  enable &  in[3] & ~in[2] & ~in[1] & ~in[0],
+                  enable & ~in[3] &  in[2] &  in[1] &  in[0],
+                  enable & ~in[3] &  in[2] &  in[1] & ~in[0],
+                  enable & ~in[3] &  in[2] & ~in[1] &  in[0],
+                  enable & ~in[3] &  in[2] & ~in[1] & ~in[0],
+                  enable & ~in[3] & ~in[2] &  in[1] &  in[0],
+                  enable & ~in[3] & ~in[2] &  in[1] & ~in[0],
+                  enable & ~in[3] & ~in[2] & ~in[1] &  in[0],
+                  enable & ~in[3] & ~in[2] & ~in[1] & ~in[0] };
+  
+endmodule
