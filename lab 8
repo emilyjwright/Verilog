@@ -1,0 +1,219 @@
+module top (hz100, reset, pb, ss7, ss6, ss5, ss4, ss3, ss2, ss1, ss0, left, right, red, green, blue);
+  input hz100, reset;
+  input [20:0] pb;
+  output [7:0] ss7, ss6, ss5, ss4, ss3, ss2, ss1, ss0, left, right;
+  output red, green, blue;
+  wire [7:0] Q;
+  wire [7:0] R;
+ 
+  countn div(.CLK(hz100), .MAX(8'd24), .Q(Q), .EN(1), .AR(reset));
+ 
+  updown3 a(.CLK(Q[4]), .AR(reset), .Q(R));
+  display_ball b(.pos(R), .ss0(ss0), .ss1(ss1), .ss2(ss2), .ss3(ss3), .ss4(ss4), .ss5(ss5), .ss6(ss6), .ss7(ss7));
+ 
+  count8du c(.E(pb[2]), .M(pb[1]), .AR(reset), .CLK(Q[4]), .Q(left[7:0]));
+  //decode_led d0(.value(left[3:0]), .enable(1'b1), .ss(ss0));
+  //decode_led d1(.value(left[7:4]), .enable(1'b1), .ss(ss1));
+  //reg [7:0] Q;
+  //reg [7:0] next_Q;
+  //assign left = Q;
+ 
+  //always @ (posedge hz100, posedge reset) begin
+    //if (reset == 1'b1)
+     //Q <= 1'b0;
+    //else
+     //Q <= next_Q;
+  //end
+ 
+  //always @ (Q)  begin
+    //if(Q == 8'd99)
+     //next_Q = 8'd0;
+    //else begin
+    //next_Q[0] = ~Q[0];
+    //next_Q[1] = Q[1] ^ Q[0];
+    //next_Q[2] = Q[2] ^ (Q[1] & Q[0]);
+    //next_Q[3] = Q[3] ^ (Q[2] & Q[1] & Q[0]);
+    //next_Q[4] = Q[4] ^ (Q[3] & Q[2] & Q[1] & Q[0]);
+    //next_Q[5] = Q[5] ^ (Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+    //next_Q[6] = Q[6] ^ (Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+    //next_Q[7] = Q[7] ^ (Q[6] & Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+  //end
+  //end
+  
+  // Your code goes here...
+ 
+endmodule
+ 
+// Add more modules down here...
+module count8du(E, M, AR, CLK, Q);
+  input wire CLK, M;
+  output reg [7:0] Q;
+  reg [7:0] next_Q;
+  input AR;
+  input E;
+ 
+  always @ (posedge CLK, posedge AR) begin
+    if(AR == 1'b1)
+      Q <= 8'b00000000;
+    else if (E == 1'b1)
+      Q <= next_Q;
+  end
+ 
+  always @ (Q, M) begin
+    if(M == 1'b0) begin
+      next_Q[0] = ~Q[0];
+      next_Q[1] =  Q[1] ^  ~Q[0];
+      next_Q[2] =  Q[2] ^ (~Q[1] & ~Q[0]);
+      next_Q[3] =  Q[3] ^ (~Q[2] & ~Q[1] & ~Q[0]);
+      next_Q[4] =  Q[4] ^ (~Q[3] & ~Q[2] & ~Q[1] & ~Q[0]);
+      next_Q[5] =  Q[5] ^ (~Q[4] & ~Q[3] & ~Q[2] & ~Q[1] & ~Q[0]);
+      next_Q[6] =  Q[6] ^ (~Q[5] & ~Q[4] & ~Q[3] & ~Q[2] & ~Q[1] & ~Q[0]);
+      next_Q[7] =  Q[7] ^ (~Q[6] & ~Q[5] & ~Q[4] & ~Q[3] & ~Q[2] & ~Q[1] & ~Q[0]);
+    end
+    else begin
+      next_Q[0] = ~Q[0];
+      next_Q[1] = Q[1] ^ Q[0];
+      next_Q[2] = Q[2] ^ (Q[1] & Q[0]);
+      next_Q[3] = Q[3] ^ (Q[2] & Q[1] & Q[0]);
+      next_Q[4] = Q[4] ^ (Q[3] & Q[2] & Q[1] & Q[0]);
+      next_Q[5] = Q[5] ^ (Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+      next_Q[6] = Q[6] ^ (Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+      next_Q[7] = Q[7] ^ (Q[6] & Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+    end
+   end
+endmodule
+module decode_led(value, enable, ss);
+  input [3:0] value;
+  input enable;
+  output [7:0] ss;
+  wire [15:0] y;
+ 
+  wire a,b,c,d,e,f,g;
+  assign ss= {g,f,e,d,c,b,a}; // connect A-G to ss0
+ 
+  // Your segment decode statements go below.
+  assign a = ~(y[1] | y[4] | y[11] | y[13]) & enable;
+  assign b = ~(y[5] | y[6] | y[11] | y[12] | y[14] | y[15]) & enable;
+  assign c = ~(y[2] | y[12] | y[14] | y[15]) & enable;
+  assign d = ~(y[1] | y[4] | y[7] | y[10] | y[15]) & enable;
+  assign e = ~(y[1] | y[3] | y[4] | y[5] | y[7] | y[9]) & enable;
+  assign f = ~(y[1] | y[2] | y[3] | y[7] | y[13]) & enable;
+  assign g = ~(y[0] | y[1] | y[7] | y[12]) & enable;
+ 
+   assign y    = { enable & value[3] & value[2] & value[1] & value[0],
+                  enable & value[3] & value[2] & value[1] & ~value[0],
+                  enable & value[3] & value[2] & ~value[1] & value[0],
+                  enable & value[3] & value[2] & ~value[1] & ~value[0],
+                  enable & value[3] & ~value[2] & value[1] & value[0],
+                  enable & value[3] & ~value[2] & value[1] & ~value[0],
+                  enable & value[3] & ~value[2] & ~value[1] & value[0],
+                  enable & value[3] & ~value[2] & ~value[1] & ~value[0],
+                  enable & ~value[3] & value[2] & value[1] & value[0],
+                  enable & ~value[3] & value[2] & value[1] & ~value[0],
+                  enable & ~value[3] & value[2] & ~value[1] & value[0],
+                  enable & ~value[3] & value[2] & ~value[1] & ~value[0],
+                  enable & ~value[3] & ~value[2] & value[1] & value[0],
+                  enable & ~value[3] & ~value[2] & value[1] & ~value[0],
+                  enable & ~value[3] & ~value[2] & ~value[1] & value[0],
+                  enable & ~value[3] & ~value[2] & ~value[1] & ~value[0] };
+ 
+endmodule
+ 
+module countn(CLK, MAX, Q, EN, AR);
+input CLK;
+input [7:0] MAX;
+output reg [7:0] Q;
+reg [7:0] next_Q;
+input EN;
+input AR;
+ 
+ always @ (posedge CLK, posedge AR) begin
+  if (AR == 1'b1)
+    Q <= 8'b00000000;
+  else if (EN == 1)
+    Q <= next_Q;
+  else if (Q == MAX)
+    Q <= 0;
+end
+ always @ (Q) begin
+      if (Q == MAX && EN == 1'b1)
+        next_Q = 0;
+      else begin
+      next_Q[0] = ~Q[0];
+      next_Q[1] =  Q[1] ^  Q[0];
+      next_Q[2] =  Q[2] ^ (Q[1] & Q[0]);
+      next_Q[3] =  Q[3] ^ (Q[2] & Q[1] & Q[0]);
+      next_Q[4] =  Q[4] ^ (Q[3] & Q[2] & Q[1] & Q[0]);
+      next_Q[5] =  Q[5] ^ (Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+      next_Q[6] =  Q[6] ^ (Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+      next_Q[7] =  Q[7] ^ (Q[6] & Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+      end
+  end
+endmodule
+ 
+module updown3(AR, CLK, Q);
+  input wire CLK;
+  input wire AR;
+  output reg [2:0] Q;
+  reg [2:0] next_Q;
+  reg dir;
+  reg next_dir;
+ 
+  always @ (posedge CLK, posedge AR) begin
+   if (AR == 1'b1) begin
+     Q <= 3'b000;
+     dir <= 1'b0;
+   end
+   else begin
+     Q <= next_Q;
+     dir <= next_dir;
+   end
+  end
+ 
+  always @ (Q, dir) begin
+    if(dir == 1'b1) 
+      if (Q == 3'b000) begin
+        next_dir = 1'b0;
+        next_Q = 3'b001;
+      end
+      else begin
+        next_Q[0] = ~Q[0];
+        next_Q[1] =  Q[1] ^  ~Q[0];
+        next_Q[2] =  Q[2] ^ (~Q[1] & ~Q[0]);
+        next_dir = 1'b1;
+      end
+    else 
+      if(Q == 3'b111) begin
+        next_dir = 1'b1;
+        next_Q = 3'b110;
+      end
+      else begin
+        next_Q[0] = ~Q[0];
+        next_Q[1] = Q[1] ^ Q[0];
+        next_Q[2] = Q[2] ^ (Q[1] & Q[0]);
+        next_dir = 1'b0;
+      end
+  end
+endmodule
+ 
+module display_ball(pos, ss0, ss1, ss2, ss3, ss4, ss5, ss6, ss7);
+  input wire [2:0] pos;
+  output wire [7:0] ss0;
+  output wire [7:0] ss1;
+  output wire [7:0] ss2;
+  output wire [7:0] ss3;
+  output wire [7:0] ss4;
+  output wire [7:0] ss5;
+  output wire [7:0] ss6;
+  output wire [7:0] ss7;
+       
+  assign ss0 = (pos == 3'd0) ? 8'b01011100: 8'b00000000;
+  assign ss1 = (pos == 3'd1) ? 8'b01011100: 8'b00000000;
+  assign ss2 = (pos == 3'd2) ? 8'b01011100: 8'b00000000;
+  assign ss3 = (pos == 3'd3) ? 8'b01011100: 8'b00000000;
+  assign ss4 = (pos == 3'd4) ? 8'b01011100: 8'b00000000;
+  assign ss5 = (pos == 3'd5) ? 8'b01011100: 8'b00000000;
+  assign ss6 = (pos == 3'd6) ? 8'b01011100: 8'b00000000;
+  assign ss7 = (pos == 3'd7) ? 8'b01011100: 8'b00000000;
+ 
+endmodule
