@@ -1,0 +1,274 @@
+// Empty top module
+
+module top (hz100, reset, pb, ss7, ss6, ss5, ss4, ss3, ss2, ss1, ss0, left, right, red, green, blue);
+  input hz100, reset;
+  input [20:0] pb;
+  output [7:0] ss7, ss6, ss5, ss4, ss3, ss2, ss1, ss0, left, right;
+  output red, green, blue;
+  
+  //prelab part 1
+  wire hz2;
+  clock_hz2 cldiv (.clk(hz100), .reset(reset), .hz2(hz2));
+  //assign green = hz2; //only for testing your prelab submission
+  
+  //prelab part 2
+  wire [4:0] keycode;
+  wire strobe;
+  scankey sk1 (.clk(hz100), .reset(reset), .in(pb[19:0]), .strobe(strobe), .out(keycode));
+  //assign right[0] = strobe;
+  //assign right[5:1] = keycode;
+  
+  //prelab part 3
+  wire [7:0] disp_en;
+  //wire [4:0] keycode;
+  //wire strobe;
+  //scankey sk1 (.clk(hz100), .reset(reset), .in(pb[19:0]), .strobe(strobe), .out(keycode));
+  display_enable_handler deh1 (.clk(strobe), .reset(reset), .keycode(keycode), .enable_out(disp_en));
+  //assign left = disp_en; //only for testing your prelab submission
+  
+  //prelab part 4
+  //wire [1:0] state;
+  dcl_controller dcl1 (.clk(strobe), .reset(reset), .enable(keycode == 5'b10000), .state(state));
+  //assign right[1:0] = state; //only for testing your prelab submission
+  
+  localparam SETPASS = 0;
+  localparam ENTRY = 1;
+  localparam VERIFY = 2;
+  wire [2:0] state;
+  wire [31:0] passwd_save;
+  passwd p1 (.clk(strobe), .reset(reset), .keycode(keycode), .enable(state == SETPASS), .out(passwd_save));
+  wire [31:0] passwd_entry;
+  passwd p2 (.clk(strobe), .reset(reset), .keycode(keycode), .enable(state == ENTRY), .out(passwd_entry));
+  //since left and right can't show more than 8 bits
+  //assign left = passwd_save [7:0];
+  //assign right = passwd_entry [7:0];
+  // Turn on the blue LED when 'state' is one
+  assign blue = state == ENTRY;
+  // Tell us if the values matched
+  assign open = state == VERIFY ? passwd_save == passwd_entry : 0;
+  assign alarm = state == VERIFY ? passwd_save != passwd_entry : 0;
+  wire [63:0] ss_status;
+  wire [63:0] ss_decout; 
+  // Flash red or assert green correspondingly
+  assign red = alarm & hz2;
+  assign green = open;
+  wire [31:0] ssdec_in;
+  wire password_entry_enable;
+  assign {ss7, ss6, ss5, ss4, ss3, ss2, ss1, ss0} = password_entry_enable == 1'b1 ? ss_decout : ss_status;
+  
+  assign ssdec_in = state == SETPASS ? passwd_save : passwd_entry;
+  assign password_entry_enable = (state != VERIFY) && (disp_en[0] | disp_en[1] | disp_en[2] | disp_en[3] | disp_en[4] | disp_en[5] | disp_en[6] | disp_en[7]) ? 1 : 0;
+  
+  
+  ssdec a (.in(ssdec_in[3:0]), .enable(disp_en[0]), .out(ss_decout[7:0]));
+  ssdec b (.in(ssdec_in[7:4]), .enable(disp_en[1]), .out(ss_decout[15:8]));
+  ssdec c (.in(ssdec_in[11:8]), .enable(disp_en[2]), .out(ss_decout[23:16]));
+  ssdec d (.in(ssdec_in[15:12]), .enable(disp_en[3]), .out(ss_decout[31:24]));
+  ssdec e (.in(ssdec_in[19:16]), .enable(disp_en[4]), .out(ss_decout[39:32]));
+  ssdec f (.in(ssdec_in[23:20]), .enable(disp_en[5]), .out(ss_decout[47:40]));
+  ssdec g (.in(ssdec_in[27:24]), .enable(disp_en[6]), .out(ss_decout[55:48]));
+  ssdec h (.in(ssdec_in[31:28]), .enable(disp_en[7]), .out(ss_decout[63:56]));
+  
+  status_display s1 (.state(state), .open(open), .error(alarm), .ss(ss_status));
+  
+endmodule
+
+// Add more modules down here...
+
+module clock_hz2(clk, reset, hz2);
+  input clk;
+  input reset;
+  output reg hz2;
+  reg next_hz2;
+  wire [7:0] MAX;
+  reg [7:0] Q;
+  reg [7:0] next_Q;
+  assign MAX = 8'd49;
+  
+
+  always @ (posedge clk, posedge reset) begin
+    if(reset == 1'b1) begin
+      hz2 <= 1'b0;
+      Q <= 8'd0;
+    end 
+    else if (Q == 8'd50) begin
+      Q <= 8'd0;
+      hz2 <= 1'b1;
+    end
+    else begin
+      Q <= next_Q;
+      hz2 <= 1'b0;
+    end
+  end
+  
+  always @(Q) begin
+    next_Q[0] = ~Q[0];
+    next_Q[1] =  Q[1] ^  Q[0];
+    next_Q[2] =  Q[2] ^ (Q[1] & Q[0]);
+    next_Q[3] =  Q[3] ^ (Q[2] & Q[1] & Q[0]);
+    next_Q[4] =  Q[4] ^ (Q[3] & Q[2] & Q[1] & Q[0]);
+    next_Q[5] =  Q[5] ^ (Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+    next_Q[6] =  Q[6] ^ (Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+    next_Q[7] =  Q[7] ^ (Q[6] & Q[5] & Q[4] & Q[3] & Q[2] & Q[1] & Q[0]);
+  end
+endmodule
+
+module scankey (clk, reset, in, strobe, out);
+  input wire clk;
+  input wire reset;
+  input wire [19:0] in;
+  output strobe;
+  output [4:0] out;
+  reg [1:0] delay;
+  wire tempstrobe;
+  
+  always_ff @ (posedge clk) 
+    delay <= (delay << 1) | {1'b0, tempstrobe};
+  
+  assign strobe = delay[1];
+  
+  assign tempstrobe = out[0] | out[1] | out[2] | out[3] | out[4] | out[5] | in[0];
+  assign out[0] = in[1] | in[3] | in[5] | in[7] | in[9] | in[11] | in[13] | in[15] | in[17] | in[19];
+  assign out[1] = in[2] | in[3] | in[6] | in[7] | in[10] | in[11] | in[14] | in[15] | in[18] | in[19];
+  assign out[2] = in[4] | in[5] | in[6] | in[7] | in[12] | in[13] | in[14] | in[15];
+  assign out[3] = in[8] | in[9] | in[10] | in[11] | in[12] | in[13] | in[14];
+  assign out[4] = in[16] | in[17] | in[18] | in[19];
+
+endmodule
+
+module display_enable_handler(clk, reset, keycode, enable_out);
+  input wire clk;
+  input wire reset;
+  input wire [4:0] keycode;
+  output reg [7:0] enable_out;
+  reg [7:0] enable_out_next;
+  
+  always @ (posedge clk, posedge reset) begin
+    if(reset == 1'b1)
+      enable_out <= 8'b00000000;
+    else
+      enable_out <= enable_out_next;
+  end
+  
+  always @(enable_out) begin
+    if(keycode == 5'b10000)
+      enable_out_next <= 8'b0000000;
+    if(keycode == 5'b10001)
+      enable_out_next <= enable_out >> 1; //shifts right
+    else if (keycode[4] == 1'b0) begin
+      enable_out_next <= enable_out << 1 | 1'b1; //shifts left
+    end //else if
+  end //always 
+endmodule
+
+module dcl_controller(clk, reset, enable, state);
+  input wire clk;
+  input wire reset;
+  input wire enable;
+  output reg [2:0] state;
+  localparam [1:0] SETPASS = 2'b00; //0
+  localparam [1:0] ENTRY = 2'b01; //1
+  localparam [1:0] VERIFY = 2'b10; //2
+  
+  always @ (posedge clk, posedge reset) begin
+    if(reset == 1'b1)
+      state <= SETPASS;
+    else if (enable == 1'b1) begin
+      if(enable == 1'b1) begin
+        if(state == SETPASS)
+          state <= ENTRY;
+        else if(state == ENTRY)
+          state <= VERIFY;
+      end //if
+    end //else
+  end //always
+endmodule
+
+module passwd(clk, reset, keycode, enable, out);
+  input clk;
+  input reset;
+  input [4:0] keycode;
+  input enable;
+  output reg [31:0] out;
+  
+  always @ (posedge clk, posedge reset) begin
+    if(reset == 1'b1)
+      out <= 32'd0;
+    else if(enable == 1'b1) begin
+      if(keycode == 5'b10001)
+        out <= out >> 4; //shift right by 4 bits
+      else if(keycode[4] == 1'b0)
+        out <= out << 4 | keycode[3:0]; //shift left 
+    end
+  end
+endmodule
+
+module status_display(state, open, error, ss);
+  input [2:0] state;
+  input open;
+  input error;
+  output [63:0] ss;
+  localparam SETPASS = 0;
+  localparam ENTRY = 1;
+  localparam VERIFY = 2;
+  
+  wire [7:0] charS = 8'b01101101;
+  wire [7:0] charE = 8'b01111001;
+  wire [7:0] charC = 8'b00111001;
+  wire [7:0] charU = 8'b00111110;
+  wire [7:0] charR = 8'b01010000;
+  wire [7:0] charO = 8'b00111111;
+  wire [7:0] charP = 8'b01110011;
+  wire [7:0] charN = 8'b01010100;
+  wire [7:0] char9 = 8'b01101111;
+  wire [7:0] char1 = 8'b00000110;
+  wire [7:0] charA = 8'b01110111;
+  wire [7:0] charL = 8'b00111000;
+  wire [7:0] charI = 8'b00110000;
+  wire [7:0] blank = 8'b00000000;
+  
+  
+  assign ss = state == SETPASS ? {8{blank}} :
+              state == ENTRY ? {charS, charE, charC, charU, charR, charE, blank, blank} :
+              state == VERIFY && open == 1'b1 ?  {charO, charP, charE, charN, blank, blank, blank, blank} :
+              state == VERIFY && error == 1'b1 ? {charC, charA, charL, charL, blank, char9, char1, char1} :
+              {8{blank}};
+ 
+endmodule
+
+module ssdec(in, enable, out);
+  input [3:0] in;
+  input enable;
+  output [7:0] out;
+  wire [15:0] y;
+  
+  wire a,b,c,d,e,f,g;
+  assign out = {g,f,e,d,c,b,a}; // connect A-G to ss0
+
+  // Your segment decode statements go below.
+  assign a = ~(y[1] | y[4] | y[11] | y[13]) & enable;
+  assign b = ~(y[5] | y[6] | y[11] | y[12] | y[14] | y[15]) & enable;
+  assign c = ~(y[2] | y[12] | y[14] | y[15]) & enable;
+  assign d = ~(y[1] | y[4] | y[7] | y[10] | y[15]) & enable;
+  assign e = ~(y[1] | y[3] | y[4] | y[5] | y[7] | y[9]) & enable;
+  assign f = ~(y[1] | y[2] | y[3] | y[7] | y[13]) & enable;
+  assign g = ~(y[0] | y[1] | y[7] | y[12]) & enable;
+  
+   assign y    = { enable &  in[3] &  in[2] &  in[1] &  in[0],
+                  enable &  in[3] &  in[2] &  in[1] & ~in[0],
+                  enable &  in[3] &  in[2] & ~in[1] &  in[0],
+                  enable &  in[3] &  in[2] & ~in[1] & ~in[0],
+                  enable &  in[3] & ~in[2] &  in[1] &  in[0],
+                  enable &  in[3] & ~in[2] &  in[1] & ~in[0],
+                  enable &  in[3] & ~in[2] & ~in[1] &  in[0],
+                  enable &  in[3] & ~in[2] & ~in[1] & ~in[0],
+                  enable & ~in[3] &  in[2] &  in[1] &  in[0],
+                  enable & ~in[3] &  in[2] &  in[1] & ~in[0],
+                  enable & ~in[3] &  in[2] & ~in[1] &  in[0],
+                  enable & ~in[3] &  in[2] & ~in[1] & ~in[0],
+                  enable & ~in[3] & ~in[2] &  in[1] &  in[0],
+                  enable & ~in[3] & ~in[2] &  in[1] & ~in[0],
+                  enable & ~in[3] & ~in[2] & ~in[1] &  in[0],
+                  enable & ~in[3] & ~in[2] & ~in[1] & ~in[0] };
+  
+endmodule
